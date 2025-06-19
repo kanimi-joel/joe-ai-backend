@@ -1,0 +1,10 @@
+fastapi
+uvicorn
+pymupdf
+openai
+faiss-cpu
+pydantic
+python-dotenv
+langchain
+tqdm
+pinecone-client
