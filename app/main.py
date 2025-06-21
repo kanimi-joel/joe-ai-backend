@@ -1,49 +1,50 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import os
-from dotenv import load_dotenv
-from openai import OpenAI
-
-# Load environment variables from .env file
-load_dotenv()
+import requests
 
 app = FastAPI()
 
-# Enable CORS for your frontend (adjust the origins as needed)
+# ✅ Allow frontend to access the backend
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "https://your-frontend-domain.com"],  # add your frontend domain
+    allow_origins=["*"],  # Replace with frontend domain in production
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Initialize OpenAI client with your API key from env variables
-openai_api_key = os.getenv("OPENAI_API_KEY")
-client = OpenAI(api_key=openai_api_key)
+# ✅ Hugging Face API setup
+HUGGINGFACE_API_URL = "https://api-inference.huggingface.co/models/gpt2"
+HUGGINGFACE_TOKEN = os.getenv("HUGGINGFACE_TOKEN")
 
-# Define the request body model
-class Message(BaseModel):
+headers = {
+    "Authorization": f"Bearer {HUGGINGFACE_TOKEN}",
+    "Content-Type": "application/json"
+}
+
+class Request(BaseModel):
     message: str
 
-# Root endpoint for health check or welcome message
-@app.get("/")
-async def root():
-    return {"message": "Welcome to JOE AI backend!"}
-
-# POST /ask endpoint for AI chat completions
 @app.post("/ask")
-async def ask_ai(payload: Message):
+async def ask(request: Request):
+    payload = { "inputs": request.message }
+
     try:
-        response = client.chat.completions.create(
-            model="gpt-3.5-turbo",
-            messages=[{"role": "user", "content": payload.message}]
-        )
-        answer = response.choices[0].message.content.strip()
-        return {"response": answer}
+        response = requests.post(HUGGINGFACE_API_URL, headers=headers, json=payload)
+        response.raise_for_status()
+        result = response.json()
+
+        # ✅ Extract generated text safely
+        reply = result[0].get("generated_text", "No response generated.")
+        return { "response": reply }
+
+    except requests.RequestException as e:
+        raise HTTPException(status_code=500, detail=f"Hugging Face error: {str(e)}")
     except Exception as e:
-        return {"response": f"Error: {str(e)}"}
+        raise HTTPException(status_code=500, detail=f"Unexpected error: {str(e)}")
+
 
 
 
