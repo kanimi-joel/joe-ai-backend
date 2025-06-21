@@ -20,7 +20,9 @@ app.add_middleware(
 )
 
 # ✅ Use Falcon 7B Instruct Model
-HUGGINGFACE_API_URL = "https://api-inference.huggingface.co/models/tiiuae/falcon-7b-instruct"
+# ✅ New (working)
+HUGGINGFACE_API_URL = "https://api-inference.huggingface.co/models/bigscience/bloomz"
+
 HUGGINGFACE_TOKEN = os.getenv("HUGGINGFACE_TOKEN")
 
 headers = {
