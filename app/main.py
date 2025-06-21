@@ -5,29 +5,24 @@ import os
 import requests
 from dotenv import load_dotenv
 
-# ✅ Load environment variables
 load_dotenv()
 
 app = FastAPI()
 
-# ✅ CORS for frontend
+# ✅ Allow frontend access
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Use exact domain in production
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# ✅ Use Falcon 7B Instruct Model
-# ✅ New (working)
-HUGGINGFACE_API_URL = "https://api-inference.huggingface.co/models/bigscience/bloomz"
-
-HUGGINGFACE_TOKEN = os.getenv("HUGGINGFACE_TOKEN")
+OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 
 headers = {
-    "Authorization": f"Bearer {HUGGINGFACE_TOKEN}",
-    "Content-Type": "application/json"
+    "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+    "Content-Type": "application/json",
 }
 
 class Request(BaseModel):
@@ -35,22 +30,22 @@ class Request(BaseModel):
 
 @app.post("/ask")
 async def ask(request: Request):
-    payload = { "inputs": request.message }
+    payload = {
+        "model": "openai/gpt-3.5-turbo",  # or "mistralai/mistral-7b-instruct"
+        "messages": [
+            {"role": "user", "content": request.message}
+        ]
+    }
 
     try:
-        response = requests.post(HUGGINGFACE_API_URL, headers=headers, json=payload)
+        response = requests.post("https://openrouter.ai/api/v1/chat/completions", headers=headers, json=payload)
         response.raise_for_status()
         result = response.json()
-
-        # Safely get reply
-        if isinstance(result, list) and "generated_text" in result[0]:
-            reply = result[0]["generated_text"]
-        else:
-            reply = "AI did not return a valid response."
-
+        reply = result["choices"][0]["message"]["content"]
         return { "response": reply }
 
     except requests.RequestException as e:
-        raise HTTPException(status_code=500, detail=f"Hugging Face error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"OpenRouter error: {str(e)}")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Unexpected error: {str(e)}")
+
