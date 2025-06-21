@@ -6,17 +6,17 @@ import requests
 
 app = FastAPI()
 
-# ✅ Allow frontend to access the backend
+# ✅ CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Replace with frontend domain in production
+    allow_origins=["*"],  # For dev, allow all. Restrict in production.
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# ✅ Hugging Face API setup
-HUGGINGFACE_API_URL = "https://api-inference.huggingface.co/models/gpt2"
+# ✅ Hugging Face API
+HUGGINGFACE_API_URL = "https://api-inference.huggingface.co/models/microsoft/DialoGPT-small"
 HUGGINGFACE_TOKEN = os.getenv("HUGGINGFACE_TOKEN")
 
 headers = {
@@ -24,9 +24,11 @@ headers = {
     "Content-Type": "application/json"
 }
 
+# ✅ Request body model
 class Request(BaseModel):
     message: str
 
+# ✅ POST endpoint
 @app.post("/ask")
 async def ask(request: Request):
     payload = { "inputs": request.message }
@@ -35,8 +37,6 @@ async def ask(request: Request):
         response = requests.post(HUGGINGFACE_API_URL, headers=headers, json=payload)
         response.raise_for_status()
         result = response.json()
-
-        # ✅ Extract generated text safely
         reply = result[0].get("generated_text", "No response generated.")
         return { "response": reply }
 
@@ -44,7 +44,3 @@ async def ask(request: Request):
         raise HTTPException(status_code=500, detail=f"Hugging Face error: {str(e)}")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Unexpected error: {str(e)}")
-
-
-
-
