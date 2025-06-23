@@ -30,12 +30,13 @@ class Request(BaseModel):
 @app.post("/ask")
 async def ask(request: Request):
     try:
-        response = client.chat.completions.create(
-            model="deepseek-ai/DeepSeek-V3",
-            messages=[
-                {"role": "user", "content": request.message}
-            ]
-        )
+      response = client.chat.completions.create(
+    model="mistralai/Mistral-7B-Instruct",
+    messages=[
+        {"role": "user", "content": request.message}
+    ]
+)
+
         return {"response": response.choices[0].message.content}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Together AI error: {str(e)}")
