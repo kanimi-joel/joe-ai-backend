@@ -23,7 +23,8 @@ headers = {
     "Content-Type": "application/json"
 }
 
-TOGETHER_API_URL = "https://api.together.xyz/v1/chat/completions"
+TOGETHER_API_URL = "https://api.together.ai/v1/chat/completions"  # ✅ correct
+
 MODEL = "mistralai/Mistral-7B-Instruct"
 
 class Request(BaseModel):
