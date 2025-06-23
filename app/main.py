@@ -5,12 +5,10 @@ import os
 import requests
 from dotenv import load_dotenv
 
-# ✅ Load environment variables
-load_dotenv()
+load_dotenv()  # for local testing, no harm in production
 
 app = FastAPI()
 
-# ✅ Allow frontend access (change "*" to domain in production)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -19,13 +17,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ✅ OpenRouter setup
-OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
-
+TOGETHER_API_KEY = os.getenv("TOGETHER_API_KEY")
 headers = {
-    "Authorization": f"Bearer {OPENROUTER_API_KEY}",
-    "Content-Type": "application/json",
+    "Authorization": f"Bearer {TOGETHER_API_KEY}",
+    "Content-Type": "application/json"
 }
+
+TOGETHER_API_URL = "https://api.together.xyz/v1/chat/completions"
+MODEL = "mistralai/Mistral-7B-Instruct"
 
 class Request(BaseModel):
     message: str
@@ -33,28 +32,20 @@ class Request(BaseModel):
 @app.post("/ask")
 async def ask(request: Request):
     payload = {
-        "model": "mistralai/mistral-7b-instruct",  # ✅ Free model
+        "model": MODEL,
         "messages": [
+            {"role": "system", "content": "You are a helpful assistant."},
             {"role": "user", "content": request.message}
         ]
     }
 
     try:
-        response = requests.post(
-            "https://openrouter.ai/api/v1/chat/completions",
-            headers=headers,
-            json=payload
-        )
+        response = requests.post(TOGETHER_API_URL, headers=headers, json=payload)
         response.raise_for_status()
-        result = response.json()
-
-        # ✅ Extract the AI's reply
-        reply = result["choices"][0]["message"]["content"]
-        return {"response": reply}
-
-    except requests.RequestException as e:
-        raise HTTPException(status_code=500, detail=f"OpenRouter error: {str(e)}")
+        choice = response.json()["choices"][0]
+        return {"response": choice["message"]["content"]}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Unexpected error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Together AI error: {str(e)}")
+
 
 
