@@ -8,3 +8,4 @@ python-dotenv
 langchain
 tqdm
 pinecone-client
+together
