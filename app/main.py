@@ -1,75 +1,93 @@
-from fastapi import FastAPI, UploadFile, File, Form
+from fastapi import FastAPI, UploadFile, File, Form, Request
 from fastapi.middleware.cors import CORSMiddleware
 from PyPDF2 import PdfReader
+from io import BytesIO
 import requests
+import os
+from dotenv import load_dotenv
+
+# Load environment variables from .env (for local development)
+load_dotenv()
+
+# Get Together AI API Key from environment
+TOGETHER_API_KEY = os.getenv("TOGETHER_API_KEY")
 
 app = FastAPI()
 
-# CORS for frontend compatibility
+# Enable CORS (you can restrict in production)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # In production, restrict this
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 @app.post("/ask")
-async def ask(request: dict):
-    user_message = request.get("message", "")
-    response = requests.post(
-        "https://api.together.xyz/v1/chat/completions",
-        headers={
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer YOUR_TOGETHER_API_KEY"
-        },
-        json={
-            "model": "deepseek-ai/DeepSeek-V3",  # or any available model
-            "messages": [
-                {"role": "user", "content": user_message}
-            ]
-        },
-    )
-    data = response.json()
-    return {
-        "response": data["choices"][0]["message"]["content"]
-        if "choices" in data else "Something went wrong."
-    }
+async def ask(request: Request):
+    try:
+        body = await request.json()
+        user_message = body.get("message", "")
+        
+        response = requests.post(
+            "https://api.together.xyz/v1/chat/completions",
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {TOGETHER_API_KEY}"
+            },
+            json={
+                "model": "deepseek-ai/DeepSeek-V3",
+                "messages": [
+                    {"role": "user", "content": user_message}
+                ]
+            },
+        )
+
+        data = response.json()
+        return {
+            "response": data["choices"][0]["message"]["content"]
+            if "choices" in data else "Something went wrong."
+        }
+    except Exception as e:
+        return {"error": str(e)}
 
 @app.post("/ask-pdf")
 async def ask_about_pdf(file: UploadFile = File(...), question: str = Form(...)):
-    contents = await file.read()
+    try:
+        contents = await file.read()
 
-    # Handle PDF
-    if file.filename.endswith(".pdf"):
-        reader = PdfReader(file.file)
-        text = ""
-        for page in reader.pages:
-            text += page.extract_text()
-    else:
-        text = contents.decode("utf-8")
+        if file.filename.endswith(".pdf"):
+            reader = PdfReader(BytesIO(contents))
+            text = ""
+            for page in reader.pages:
+                page_text = page.extract_text()
+                if page_text:
+                    text += page_text
+        else:
+            text = contents.decode("utf-8")
 
-    # Combine question and extracted text
-    prompt = f"Document:\n{text[:2000]}\n\nQuestion: {question}"
+        # Limit text size sent to model
+        prompt = f"Document:\n{text[:2000]}\n\nQuestion: {question}"
 
-    response = requests.post(
-        "https://api.together.xyz/v1/chat/completions",
-        headers={
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer YOUR_TOGETHER_API_KEY"
-        },
-        json={
-            "model": "deepseek-ai/DeepSeek-V3",
-            "messages": [
-                {"role": "user", "content": prompt}
-            ]
-        },
-    )
-    data = response.json()
-    return {
-        "response": data["choices"][0]["message"]["content"]
-        if "choices" in data else "Something went wrong."
-    }
+        response = requests.post(
+            "https://api.together.xyz/v1/chat/completions",
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {TOGETHER_API_KEY}"
+            },
+            json={
+                "model": "deepseek-ai/DeepSeek-V3",
+                "messages": [
+                    {"role": "user", "content": prompt}
+                ]
+            },
+        )
 
+        data = response.json()
+        return {
+            "response": data["choices"][0]["message"]["content"]
+            if "choices" in data else "Something went wrong."
+        }
 
-
+    except Exception as e:
+        return {"error": str(e)}
