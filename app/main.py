@@ -1,92 +1,85 @@
-from fastapi import FastAPI, UploadFile, File, Form, Request
+# app/main.py
+
+from fastapi import FastAPI, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
-from PyPDF2 import PdfReader
-from io import BytesIO
-import requests
+from fastapi.responses import JSONResponse
+import fitz  # PyMuPDF
 import os
-from dotenv import load_dotenv
+import requests
 
-# Load environment variables
-load_dotenv()
+# Initialize app
+app = FastAPI(
+    title="JOE AI Backend",
+    version="0.1.0",
+    description="Chat + PDF-powered AI Assistant"
+)
 
-TOGETHER_API_KEY = os.getenv("TOGETHER_API_KEY")
-
-app = FastAPI()
-
-# CORS configuration
+# Enable CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Change this to specific domain in production
+    allow_origins=["*"],  # Change to frontend domain in production
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-@app.post("/ask")
-async def ask(request: Request):
-    try:
-        body = await request.json()
-        user_message = body.get("message", "")
+# Environment key (Together API or OpenAI)
+TOGETHER_API_KEY = os.getenv("TOGETHER_API_KEY")  # set this in your Railway settings
+MODEL = "deepseek-ai/DeepSeek-V3"  # You can change this to any model available on Together AI
 
-        response = requests.post(
+
+# === Core AI helper ===
+def ask_openai(prompt: str) -> str:
+    try:
+        res = requests.post(
             "https://api.together.xyz/v1/chat/completions",
             headers={
-                "Content-Type": "application/json",
-                "Authorization": f"Bearer {TOGETHER_API_KEY}"
+                "Authorization": f"Bearer {TOGETHER_API_KEY}",
+                "Content-Type": "application/json"
             },
             json={
-                "model": "deepseek-ai/DeepSeek-V3",
-                "messages": [
-                    {"role": "user", "content": user_message}
-                ]
-            },
-        )
-
-        data = response.json()
-        return {
-            "response": data["choices"][0]["message"]["content"]
-            if "choices" in data else "Something went wrong."
-        }
-
-    except Exception as e:
-        return {"error": str(e)}
-
-@app.post("/ask-pdf")
-async def ask_about_pdf(file: UploadFile = File(...), question: str = Form(...)):
-    try:
-        contents = await file.read()
-
-        if file.filename.endswith(".pdf"):
-            reader = PdfReader(BytesIO(contents))
-            text = ""
-            for page in reader.pages:
-                page_text = page.extract_text()
-                if page_text:
-                    text += page_text
-        else:
-            text = contents.decode("utf-8")
-
-        prompt = f"Document:\n{text[:2000]}\n\nQuestion: {question}"
-
-        response = requests.post(
-            "https://api.together.xyz/v1/chat/completions",
-            headers={
-                "Content-Type": "application/json",
-                "Authorization": f"Bearer {TOGETHER_API_KEY}"
-            },
-            json={
-                "model": "deepseek-ai/DeepSeek-V3",
+                "model": MODEL,
                 "messages": [
                     {"role": "user", "content": prompt}
                 ]
-            },
+            }
         )
+        result = res.json()
+        return result['choices'][0]['message']['content']
+    except Exception as e:
+        return f"❌ AI error: {str(e)}"
 
-        data = response.json()
-        return {
-            "response": data["choices"][0]["message"]["content"]
-            if "choices" in data else "Something went wrong."
-        }
+
+# === Health Check ===
+@app.get("/")
+def root():
+    return {"message": "JOE AI backend is live and ready 🚀"}
+
+
+# === Handle chat messages ===
+@app.post("/ask")
+async def ask(message: str = Form(...)):
+    response = ask_openai(message)
+    return {"response": response}
+
+
+# === Handle PDF upload and Q&A ===
+@app.post("/ask-pdf")
+async def ask_pdf(file: UploadFile = File(...), question: str = Form(...)):
+    if file.content_type != "application/pdf":
+        return JSONResponse(status_code=400, content={"error": "Only PDF files are supported."})
+
+    try:
+        content = await file.read()
+        doc = fitz.open(stream=content, filetype="pdf")
+        full_text = ""
+
+        for page in doc:
+            full_text += page.get_text()
+
+        prompt = f"Based on this document:\n{full_text}\n\nAnswer this question: {question}"
+        answer = ask_openai(prompt)
+        return {"response": answer}
 
     except Exception as e:
-        return {"error": str(e)}
+        return JSONResponse(status_code=500, content={"error": str(e)})
