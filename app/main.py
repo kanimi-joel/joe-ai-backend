@@ -1,34 +1,35 @@
-# app/main.py
-
 from fastapi import FastAPI, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel
 import fitz  # PyMuPDF
 import os
 import requests
 
-# Initialize app
 app = FastAPI(
     title="JOE AI Backend",
     version="0.1.0",
     description="Chat + PDF-powered AI Assistant"
 )
 
-# Enable CORS
+# Enable CORS for frontend access
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Change to frontend domain in production
+    allow_origins=["*"],  # In production, restrict this to your frontend domain
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Environment key (Together API or OpenAI)
-TOGETHER_API_KEY = os.getenv("TOGETHER_API_KEY")  # set this in your Railway settings
-MODEL = "deepseek-ai/DeepSeek-V3"  # You can change this to any model available on Together AI
+TOGETHER_API_KEY = os.getenv("TOGETHER_API_KEY")
+MODEL = "deepseek-ai/DeepSeek-V3"
 
 
-# === Core AI helper ===
+# Pydantic model for JSON body in /ask
+class AskRequest(BaseModel):
+    message: str
+
+
 def ask_openai(prompt: str) -> str:
     try:
         res = requests.post(
@@ -50,20 +51,17 @@ def ask_openai(prompt: str) -> str:
         return f"❌ AI error: {str(e)}"
 
 
-# === Health Check ===
 @app.get("/")
 def root():
     return {"message": "JOE AI backend is live and ready 🚀"}
 
 
-# === Handle chat messages ===
 @app.post("/ask")
-async def ask(message: str = Form(...)):
-    response = ask_openai(message)
+async def ask(request: AskRequest):
+    response = ask_openai(request.message)
     return {"response": response}
 
 
-# === Handle PDF upload and Q&A ===
 @app.post("/ask-pdf")
 async def ask_pdf(file: UploadFile = File(...), question: str = Form(...)):
     if file.content_type != "application/pdf":
