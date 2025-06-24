@@ -1,43 +1,75 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
-import os
-from together import Together
-from dotenv import load_dotenv
-
-load_dotenv()
+from PyPDF2 import PdfReader
+import requests
 
 app = FastAPI()
 
-# ✅ CORS for frontend
+# CORS for frontend compatibility
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Change this to frontend domain in production
+    allow_origins=["*"],  # In production, restrict this
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# ✅ Together AI setup
-TOGETHER_API_KEY = os.getenv("TOGETHER_API_KEY")
-client = Together(api_key=TOGETHER_API_KEY)
-
-class Request(BaseModel):
-    message: str
-    context: str = ""
-
 @app.post("/ask")
-async def ask(request: Request):
-    try:
-        response = client.chat.completions.create(
-            model="deepseek-ai/DeepSeek-V3",
-            messages=[
-                {"role": "system", "content": f"The user uploaded the following document:\n\n{request.context}"},
-                {"role": "user", "content": request.message}
+async def ask(request: dict):
+    user_message = request.get("message", "")
+    response = requests.post(
+        "https://api.together.xyz/v1/chat/completions",
+        headers={
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer YOUR_TOGETHER_API_KEY"
+        },
+        json={
+            "model": "deepseek-ai/DeepSeek-V3",  # or any available model
+            "messages": [
+                {"role": "user", "content": user_message}
             ]
-        )
-        return {"response": response.choices[0].message.content}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Together AI error: {str(e)}")
+        },
+    )
+    data = response.json()
+    return {
+        "response": data["choices"][0]["message"]["content"]
+        if "choices" in data else "Something went wrong."
+    }
+
+@app.post("/ask-pdf")
+async def ask_about_pdf(file: UploadFile = File(...), question: str = Form(...)):
+    contents = await file.read()
+
+    # Handle PDF
+    if file.filename.endswith(".pdf"):
+        reader = PdfReader(file.file)
+        text = ""
+        for page in reader.pages:
+            text += page.extract_text()
+    else:
+        text = contents.decode("utf-8")
+
+    # Combine question and extracted text
+    prompt = f"Document:\n{text[:2000]}\n\nQuestion: {question}"
+
+    response = requests.post(
+        "https://api.together.xyz/v1/chat/completions",
+        headers={
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer YOUR_TOGETHER_API_KEY"
+        },
+        json={
+            "model": "deepseek-ai/DeepSeek-V3",
+            "messages": [
+                {"role": "user", "content": prompt}
+            ]
+        },
+    )
+    data = response.json()
+    return {
+        "response": data["choices"][0]["message"]["content"]
+        if "choices" in data else "Something went wrong."
+    }
+
 
 
