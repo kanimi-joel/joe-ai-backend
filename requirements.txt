@@ -9,3 +9,5 @@ langchain
 tqdm
 pinecone-client
 together
+requests
+PyPDF2

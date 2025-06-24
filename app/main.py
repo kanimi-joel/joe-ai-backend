@@ -6,18 +6,17 @@ import requests
 import os
 from dotenv import load_dotenv
 
-# Load environment variables from .env (for local development)
+# Load environment variables
 load_dotenv()
 
-# Get Together AI API Key from environment
 TOGETHER_API_KEY = os.getenv("TOGETHER_API_KEY")
 
 app = FastAPI()
 
-# Enable CORS (you can restrict in production)
+# CORS configuration
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["*"],  # Change this to specific domain in production
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -28,7 +27,7 @@ async def ask(request: Request):
     try:
         body = await request.json()
         user_message = body.get("message", "")
-        
+
         response = requests.post(
             "https://api.together.xyz/v1/chat/completions",
             headers={
@@ -48,6 +47,7 @@ async def ask(request: Request):
             "response": data["choices"][0]["message"]["content"]
             if "choices" in data else "Something went wrong."
         }
+
     except Exception as e:
         return {"error": str(e)}
 
@@ -66,7 +66,6 @@ async def ask_about_pdf(file: UploadFile = File(...), question: str = Form(...))
         else:
             text = contents.decode("utf-8")
 
-        # Limit text size sent to model
         prompt = f"Document:\n{text[:2000]}\n\nQuestion: {question}"
 
         response = requests.post(
