@@ -11,3 +11,4 @@ pinecone-client
 together
 requests
 PyPDF2
+python-multipart  
